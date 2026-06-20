@@ -43,26 +43,37 @@ const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
 
 async function initMailer() {
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-    console.log('SMTP configured:', process.env.SMTP_HOST);
-    return;
+    try {
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
+      await transporter.verify();
+      console.log('SMTP configured:', process.env.SMTP_HOST);
+      return;
+    } catch (err) {
+      console.warn('SMTP config failed, OTP will be in logs only:', err.message);
+      transporter = null;
+      return;
+    }
   }
 
-  const account = await nodemailer.createTestAccount();
-  transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: { user: account.user, pass: account.pass },
-  });
-  console.log('Ethereal Email:', account.user);
-  console.log('Ethereal Pass:', account.pass);
-  console.log('OTP emails captured at https://ethereal.email');
+  try {
+    const account = await nodemailer.createTestAccount();
+    transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: { user: account.user, pass: account.pass },
+    });
+    console.log('Ethereal Email:', account.user);
+    console.log('OTP emails captured at https://ethereal.email');
+  } catch {
+    console.warn('Ethereal setup failed, OTP will be in logs only');
+    transporter = null;
+  }
 }
 
 function authMiddleware(req, res, next) {
@@ -88,18 +99,21 @@ app.post('/api/send-otp', async (req, res) => {
 
   console.log(`\n=== OTP for ${email}: ${code} ===\n`);
 
-  try {
-    const fromAddr = process.env.SMTP_FROM || '"ChatApp" <noreply@chatapp.com>';
-    const info = await transporter.sendMail({
-      from: fromAddr,
-      to: email,
-      subject: 'Your OTP Code',
-      html: `<p>Your OTP code is: <strong>${code}</strong></p><p>Expires in 10 minutes.</p>`,
-    });
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log('Email sent. Preview URL:', previewUrl);
-  } catch (err) {
-    console.error('Email delivery failed (OTP still available in logs):', err.message);
+  if (transporter) {
+    try {
+      const fromAddr = process.env.SMTP_FROM || '"ChatApp" <noreply@chatapp.com>';
+      await Promise.race([
+        transporter.sendMail({
+          from: fromAddr,
+          to: email,
+          subject: 'Your OTP Code',
+          html: `<p>Your OTP code is: <strong>${code}</strong></p><p>Expires in 10 minutes.</p>`,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Email timeout')), 8000)),
+      ]);
+    } catch (err) {
+      console.error('Email send failed, OTP still available in logs:', err.message);
+    }
   }
 
   res.json({ message: 'OTP sent' });

@@ -37,7 +37,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await axios.post('/api/send-otp', { email });
+      await axios.post('/api/send-otp', { email }, { timeout: 15000 });
       setStep('register');
     } catch {
       setError('Failed to send OTP');
