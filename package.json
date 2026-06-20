@@ -2,6 +2,7 @@
   "name": "chat-app",
   "private": true,
   "scripts": {
+    "postinstall": "cd server && npm install && cd ../client && npm install",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd server && npm start",
     "client": "cd client && npm run dev",
