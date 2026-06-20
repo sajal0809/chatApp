@@ -4,6 +4,7 @@ dist/
 *.db-wal
 *.db-shm
 .env
-uploads/*
-!uploads/.gitkeep
+**/uploads/*
+!**/uploads/.gitkeep
 .DS_Store
+
