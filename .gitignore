@@ -6,3 +6,4 @@ dist/
 .env
 uploads/*
 !uploads/.gitkeep
+.DS_Store
